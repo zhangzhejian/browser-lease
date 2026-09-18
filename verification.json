@@ -1,0 +1,127 @@
+{
+  "at": "2026-09-18T08:11:18Z",
+  "automated_tests": {
+    "passed": 30,
+    "failed": 0,
+    "skipped": 0
+  },
+  "cli_smoke": [
+    {
+      "command": [
+        "register",
+        "--file",
+        "-"
+      ],
+      "exit_code": 0,
+      "code": "register"
+    },
+    {
+      "command": [
+        "register",
+        "--file",
+        "-"
+      ],
+      "exit_code": 0,
+      "code": "register"
+    },
+    {
+      "command": [
+        "register",
+        "--file",
+        "-"
+      ],
+      "exit_code": 3,
+      "code": "resource_conflict"
+    },
+    {
+      "command": [
+        "list",
+        "--active",
+        "--environment",
+        "local-smoke",
+        "--probe"
+      ],
+      "exit_code": 0,
+      "code": "list"
+    },
+    {
+      "command": [
+        "show",
+        "smoke-1789719072-a",
+        "--probe"
+      ],
+      "exit_code": 0,
+      "code": "show"
+    },
+    {
+      "command": [
+        "reconnect",
+        "smoke-1789719072-a",
+        "--agent-pid",
+        "41137"
+      ],
+      "exit_code": 0,
+      "code": "reconnect"
+    },
+    {
+      "command": [
+        "stop",
+        "smoke-1789719072-a"
+      ],
+      "exit_code": 0,
+      "code": "stop"
+    },
+    {
+      "command": [
+        "show",
+        "smoke-1789719072-b",
+        "--probe"
+      ],
+      "exit_code": 0,
+      "code": "show"
+    },
+    {
+      "command": [
+        "stop",
+        "smoke-1789719072-b"
+      ],
+      "exit_code": 0,
+      "code": "stop"
+    },
+    {
+      "command": [
+        "purge-profile",
+        "smoke-1789719072-a"
+      ],
+      "exit_code": 0,
+      "code": "purge-profile"
+    },
+    {
+      "command": [
+        "purge-profile",
+        "smoke-1789719072-b"
+      ],
+      "exit_code": 0,
+      "code": "purge-profile"
+    },
+    {
+      "command": [
+        "events",
+        "smoke-1789719072-a"
+      ],
+      "exit_code": 0,
+      "code": "events"
+    }
+  ],
+  "existing_chrome_processes_preserved": 3,
+  "evidence_dir": "/private/var/folders/08/n6_g8fbd53j92rjb97wz60_r0000gn/T/qa-browser-cli-check-7ns8h2qg",
+  "rename_verification": {
+    "at": "2026-09-18T08:16:26.491231+00:00",
+    "name": "browser-lease",
+    "tests_passed": 30,
+    "preserved_tasks": 2,
+    "active_tasks": 0,
+    "ruff": "passed",
+    "cli": "passed"
+  }
+}

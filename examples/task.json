@@ -1,0 +1,18 @@
+{
+  "task": "qa-001",
+  "description": "中国 Test：普通学员 A 学习主线",
+  "slot": "worker-a",
+  "agent_pid": 1111,
+  "environment": "cn-test",
+  "browser_data_dir": "/Users/zhejianzhang/browser-lease-data/worker-a/chrome-data",
+  "account": "learner-a",
+  "course_run": "run-a",
+  "artifacts_dir": "/Users/zhejianzhang/browser-lease-artifacts/qa-001",
+  "control_mode": "browser",
+  "headless": false,
+  "environment_access": "shared",
+  "resources": [
+    {"kind": "course", "id": "course-a", "access": "read"}
+  ]
+}
+

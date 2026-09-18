@@ -1,0 +1,11 @@
+#!/bin/sh
+launcher_path=$0
+while [ -L "$launcher_path" ]; do
+    launcher_link=$(readlink "$launcher_path") || exit 1
+    case "$launcher_link" in
+        /*) launcher_path=$launcher_link ;;
+        *) launcher_path=$(dirname "$launcher_path")/$launcher_link ;;
+    esac
+done
+launcher_dir=$(CDPATH= cd -- "$(dirname "$launcher_path")" && pwd) || exit 1
+exec uv run --project "$launcher_dir" --no-sync browser-lease "$@"
