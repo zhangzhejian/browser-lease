@@ -45,6 +45,39 @@ def identity(pid: int) -> dict | None:
         raise Problem("process_unreadable", "无法核对进程身份", pid=pid) from exc
 
 
+AGENT_NAMES = frozenset({"claude", "codex", "gemini", "cursor", "aider"})
+
+
+def agent_name(p: psutil.Process, names: frozenset[str]) -> str | None:
+    """进程名、命令行前两段和可执行文件路径任一段命中已知名字即匹配。"""
+    candidates = [p.name()]
+    with contextlib.suppress(psutil.AccessDenied, psutil.ZombieProcess):
+        candidates += [Path(a).stem for a in p.cmdline()[:2]]
+        candidates += list(Path(p.exe()).parts)
+    return next((c for c in candidates if c.lower() in names), None)
+
+
+def agent_process(start: int | None = None, names: frozenset[str] = AGENT_NAMES) -> dict:
+    """沿父进程链向上查找第一个已知智能体进程，供 agent_pid 申报使用。"""
+    chain, agent = [], None
+    try:
+        p = psutil.Process(os.getppid() if start is None else start)
+        while p.pid > 1 and len(chain) < 32:
+            name, matched = p.name(), None
+            chain.append({"pid": p.pid, "name": name})
+            if agent is None:
+                matched = agent_name(p, names)
+            if matched:
+                chain[-1]["name"] = matched
+                agent = {"pid": p.pid, "name": matched, "create_time": p.create_time()}
+            p = p.parent()
+            if p is None:
+                break
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    return {"agent": agent, "chain": chain, "known_names": sorted(names)}
+
+
 def alive(ref: dict | None) -> bool:
     return bool(ref and identity(ref["pid"]) == ref)
 

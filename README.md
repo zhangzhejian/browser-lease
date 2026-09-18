@@ -15,6 +15,7 @@ uv sync --locked
 也可以使用 `uv run --project /Users/zhejianzhang/browser-lease browser-lease ...`。
 
 ```bash
+browser-lease whoami                  # 沿父进程链推断智能体进程，得到 agent_pid
 browser-lease register --file /绝对路径/task.json
 browser-lease list --active --probe
 browser-lease list --environment cn-test --slot worker-a
@@ -146,7 +147,13 @@ MCP 的显式截图文件名可能按工作目录解析，调用者仍需确保�
 
 ## 给智能体的使用约定
 
-可将本段作为个人规则入口的引用内容；本次没有自动改写全局技能或 AGENTS.md。
+面向智能体的精简说明在 `skills/browser-lease/SKILL.md`，可软链到 `~/.claude/skills/browser-lease/` 让 Claude Code 自动触发：
+
+```bash
+ln -s "$PWD/skills/browser-lease" ~/.claude/skills/browser-lease
+```
+
+以下约定是 SKILL.md 的依据。
 
 1. 浏览器操作前，通过 browser-lease register 申报全部资源。冲突后修改真实任务资源并重试，
    不通过改账号/环境别名绕过冲突。

@@ -6,6 +6,7 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
 import pytest
 
 from browser_lease.manager import Manager, Problem, conflicts, identity, normalize
@@ -268,3 +269,21 @@ def test_cli_json_errors_and_pagination(tmp_path, capsys):
     with pytest.raises(Problem) as err:
         run(parser().parse_args(["register", "--file", str(bad)]), m)
     assert err.value.code == "invalid_json"
+
+
+def test_agent_process_walks_parent_chain():
+    from browser_lease.manager import agent_process
+
+    me = psutil.Process()
+    found = agent_process(start=os.getpid(), names=frozenset({me.name().lower()}))
+    assert found["agent"]["pid"] == os.getpid()
+    assert found["agent"]["create_time"] == identity(os.getpid())["create_time"]
+    assert found["chain"][0]["pid"] == os.getpid()
+
+
+def test_agent_process_without_known_agent():
+    from browser_lease.manager import agent_process
+
+    found = agent_process(start=os.getpid(), names=frozenset({"no-such-agent"}))
+    assert found["agent"] is None
+    assert found["chain"]

@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from .manager import ACTIVE, Manager, Problem
+from .manager import ACTIVE, Manager, Problem, agent_process
 
 
 class Parser(argparse.ArgumentParser):
@@ -41,6 +41,7 @@ def parser():
     events = sub.add_parser("events", help="查看任务生命周期审计记录")
     events.add_argument("task")
     events.add_argument("--limit", type=int, default=50)
+    sub.add_parser("whoami", help="沿父进程链推断当前智能体进程，供申报 agent_pid 使用")
     return p
 
 
@@ -90,6 +91,11 @@ def run(args, manager):
         if not 1 <= args.limit <= 500:
             raise Problem("invalid_arguments", "limit 范围为 1–500")
         return {"events": manager.events(args.task, args.limit)}
+    if args.command == "whoami":
+        found = agent_process()
+        if found["agent"] is None:
+            found["hint"] = "未识别到已知智能体进程；请由宿主提供长期运行进程的 PID"
+        return found
 
 
 def main():
