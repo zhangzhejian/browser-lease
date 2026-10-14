@@ -287,3 +287,37 @@ def test_agent_process_without_known_agent():
     found = agent_process(start=os.getpid(), names=frozenset({"no-such-agent"}))
     assert found["agent"] is None
     assert found["chain"]
+
+
+def test_default_profile_is_bound_to_environment_and_account(tmp_path):
+    root = tmp_path / "profiles"
+    raw = spec(tmp_path, account="learner-a")
+    del raw["browser_data_dir"]
+    first = normalize(raw, root)
+    assert first["browser_data_dir"] == str((root / "cn-test" / "learner-a").resolve())
+    second = normalize({**raw, "task": "task-b", "slot": "task-b"}, root)
+    assert second["browser_data_dir"] == first["browser_data_dir"]
+    other = normalize({**raw, "environment": "prod"}, root)
+    assert other["browser_data_dir"] != first["browser_data_dir"]
+    # The shared profile still serializes tasks through the account claim.
+    assert "account" in conflicts(second, [{"spec": first, "status": "ready"}])[0]["fields"]
+
+
+def test_profiles_lists_reuse_and_occupancy(tmp_path):
+    from browser_lease.cli import parser, run
+
+    root = tmp_path / "profiles"
+    m = Manager(tmp_path / "state", profile_root=root)
+    for task, status in (("task-a", "stopped"), ("task-b", "ready")):
+        raw = spec(tmp_path, task, account="learner-a")
+        del raw["browser_data_dir"]
+        m.save({"spec": normalize(raw, root), "status": status}, "fixture")
+    m.save(active(spec(tmp_path, "task-c", environment="prod")), "fixture")
+    result = run(parser().parse_args(["profiles", "--environment", "cn-test"]), m)
+    [profile] = result["profiles"]
+    assert profile["account"] == "learner-a"
+    assert profile["tasks"] == 2
+    assert profile["last_task"] == "task-b"
+    assert profile["in_use_by"] == "task-b"
+    assert profile["default_location"] is True
+    assert profile["exists"] is False

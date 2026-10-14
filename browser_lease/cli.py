@@ -38,6 +38,9 @@ def parser():
     cleanup.add_argument("--apply", action="store_true", help="执行回收；默认只列候选")
     purge = sub.add_parser("purge-profile", help="显式删除已停止任务的受管登录资料；保留证据")
     purge.add_argument("task")
+    profiles = sub.add_parser("profiles", help="按环境和账号列出已用过的登录资料目录及占用情况")
+    profiles.add_argument("--environment")
+    profiles.add_argument("--account")
     events = sub.add_parser("events", help="查看任务生命周期审计记录")
     events.add_argument("task")
     events.add_argument("--limit", type=int, default=50)
@@ -87,6 +90,8 @@ def run(args, manager):
         return {"applied": args.apply, "tasks": rows}
     if args.command == "purge-profile":
         return manager.purge_profile(args.task)
+    if args.command == "profiles":
+        return {"profiles": manager.profiles(args.environment, args.account)}
     if args.command == "events":
         if not 1 <= args.limit <= 500:
             raise Problem("invalid_arguments", "limit 范围为 1–500")

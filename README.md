@@ -26,6 +26,7 @@ browser-lease stop qa-001
 browser-lease cleanup                 # 只列原执行者已退出的任务
 browser-lease cleanup --apply         # 关闭这些任务的浏览器并释放占用
 browser-lease purge-profile qa-001    # 停止后显式删除登录资料；保留证据
+browser-lease profiles --environment cn-test   # 列出用过的登录资料目录、最近任务和当前占用
 ```
 
 申报示例见 `examples/task.json`。PID 和示例账号、学习实例必须替换为实际值。
@@ -34,6 +35,19 @@ browser-lease purge-profile qa-001    # 停止后显式删除登录资料；保�
 `task` 唯一，同一执行者以完全相同申报重试会返回已有浏览器；已结束任务使用新编号。
 账号不涉及登录时可声明统一的 `visitor` 标识，保守地独占它，或为真正独立访客槽位分配不同标识。
 不涉及学习实例时显式填写 `course_run: null`。
+
+## 登录资料复用
+
+`browser_data_dir` 可省略。省略时固定为 `~/browser-lease-data/profiles/<environment>/<account>`，
+同一环境的同一账号在所有任务间复用这个目录，Cookie 和 Chrome 保存的密码随之保留。
+账号在同一环境内本就独占，所以同一目录不会被两个任务同时使用。
+
+账号首次使用时由用户在可见窗口（`headless: false`）手动登录，并让 Chrome 保存密码。
+之后的任务直接处于登录状态；会话过期时，Chrome 在登录页提供已保存的密码，用户确认即可。
+智能体不输入、不读取密码。不要在这些 Chrome 里登录 Google 账号：同步会把个人密码带进智能体可控的浏览器。
+
+显式填写 `browser_data_dir` 仍然有效，用于继续使用旧目录。`profiles` 只读取注册表，
+不读 Cookie 或密码；`default_location` 表示目录是否位于上述固定位置。
 
 ## 申报、冲突与持久化
 

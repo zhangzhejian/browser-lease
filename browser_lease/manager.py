@@ -21,6 +21,8 @@ import psutil
 
 ACTIVE = {"starting", "ready", "stopping", "cleanup_required"}
 DEFAULT_ROOT = Path.home() / ".local/state/browser-lease"
+# One long-lived profile per environment and account, so logins and saved passwords are reused.
+PROFILE_ROOT = Path.home() / "browser-lease-data/profiles"
 MARKER = ".browser-lease-owner.json"
 ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 START_TIMEOUT = 20.0
@@ -129,7 +131,7 @@ def native_launch(args: list[str]) -> list[str]:
     return args
 
 
-def normalize(raw: dict) -> dict:
+def normalize(raw: dict, profile_root: Path = PROFILE_ROOT) -> dict:
     if not isinstance(raw, dict):
         raise Problem("invalid_request", "申报必须是 JSON 对象")
     required = {
@@ -137,13 +139,19 @@ def normalize(raw: dict) -> dict:
         "slot",
         "agent_pid",
         "environment",
-        "browser_data_dir",
         "account",
         "course_run",
         "artifacts_dir",
         "control_mode",
     }
-    optional = {"description", "headless", "chrome_executable", "resources", "environment_access"}
+    optional = {
+        "description",
+        "headless",
+        "chrome_executable",
+        "resources",
+        "environment_access",
+        "browser_data_dir",
+    }
     if required - raw.keys() or raw.keys() - required - optional:
         raise Problem(
             "invalid_request",
@@ -170,6 +178,7 @@ def normalize(raw: dict) -> dict:
     except psutil.NoSuchProcess as exc:
         raise Problem("agent_not_alive", "申报进程已退出") from exc
     s["owner_identity"] = owner
+    s.setdefault("browser_data_dir", str(profile_root / s["environment"] / s["account"]))
     for key in ("browser_data_dir", "artifacts_dir"):
         if not isinstance(s[key], str) or not Path(s[key]).is_absolute():
             raise Problem("invalid_request", f"{key} 必须是绝对路径")
@@ -253,8 +262,11 @@ def conflicts(s: dict, rows: list[dict]) -> list[dict]:
 
 
 class Manager:
-    def __init__(self, root: Path = DEFAULT_ROOT, start_timeout=START_TIMEOUT):
+    def __init__(
+        self, root: Path = DEFAULT_ROOT, start_timeout=START_TIMEOUT, profile_root=PROFILE_ROOT
+    ):
         self.root = root.resolve()
+        self.profile_root = profile_root
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.root, 0o700)
         self.start_timeout = start_timeout
@@ -460,7 +472,7 @@ class Manager:
         return out
 
     def register(self, raw: dict) -> dict:
-        spec = normalize(raw)
+        spec = normalize(raw, self.profile_root)
         with self.lock():
             rows = self.rows()
             previous = next((r for r in rows if r["spec"]["task"] == spec["task"]), None)
@@ -712,6 +724,42 @@ class Manager:
             row["profile_purged"] = True
             self.save(row, "profile_purged")
             return self.view(row)
+
+    def profiles(self, environment: str | None = None, account: str | None = None) -> list[dict]:
+        """Registry view of login profiles; never reads cookies or saved passwords."""
+        found: dict[str, dict] = {}
+        for row in self.rows():
+            s = row["spec"]
+            if (environment and s["environment"] != environment) or (
+                account and s["account"] != account
+            ):
+                continue
+            item = found.setdefault(
+                s["browser_data_dir"],
+                {
+                    "browser_data_dir": s["browser_data_dir"],
+                    "environment": s["environment"],
+                    "account": s["account"],
+                    "tasks": 0,
+                    "last_task": None,
+                    "last_used_at": 0.0,
+                    "in_use_by": None,
+                },
+            )
+            item["tasks"] += 1
+            used = row.get("updated_at") or row.get("created_at") or 0.0
+            if used >= item["last_used_at"]:
+                item["last_task"], item["last_used_at"] = s["task"], used
+            if row["status"] in ACTIVE:
+                item["in_use_by"] = s["task"]
+        result = []
+        for item in found.values():
+            path = Path(item["browser_data_dir"])
+            item["exists"] = path.exists()
+            default = self.profile_root / item["environment"] / item["account"]
+            item["default_location"] = path == default.resolve()
+            result.append(item)
+        return sorted(result, key=lambda i: i["last_used_at"], reverse=True)
 
     def events(self, task: str, limit: int = 50) -> list[dict]:
         self.get(task)
