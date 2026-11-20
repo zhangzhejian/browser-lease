@@ -27,7 +27,7 @@ browser-lease cleanup                 # 只列原执行者已退出的任务
 browser-lease cleanup --apply         # 关闭这些任务的浏览器并释放占用
 browser-lease purge-profile qa-001    # 停止后显式删除登录资料；保留证据
 browser-lease profiles --environment cn-test   # 列出用过的登录资料目录、最近任务和当前占用
-browser-lease profiles --search "BotLearn 管理员"
+browser-lease profiles --page 1                # 阅读现存 profile 的账号和描述，按 next_page 翻页
 ```
 
 申报示例见 `examples/task.json`。PID 和示例账号、学习实例必须替换为实际值。
@@ -39,7 +39,9 @@ browser-lease profiles --search "BotLearn 管理员"
 
 ## 登录资料复用
 
-每个 profile 都有一个可编辑的 `description`，用一句话写清平台、账号角色和用途，例如“BotLearn 中国测试环境的课程管理员，用于课程发布验收”。Agent 可以用 `profiles --search "BotLearn 管理员"` 查找。空格分隔的词须全部出现在环境、账号标签或描述中，英文忽略大小写。选择 `exists: true` 的结果，使用该条目的环境、账号和目录申报。
+每个 profile 都有一个可编辑的 `description`，用一句话写清平台、账号角色和用途，例如“BotLearn 中国测试环境的课程管理员，用于课程发布验收”。Agent 用 `profiles --page 1` 浏览现存目录，按描述选择账号，然后用该条目的环境、账号和目录申报。每页 25 项，按环境、账号和路径排序，`next_page` 为下一页页码，末页返回 `null`。省略 `--page` 可查看完整历史记录。
+
+已知环境可用 `profiles --environment cn-test --page 1`。已知登记用词也可以加 `--search "BotLearn 管理员"`，空格分隔的词须全部出现在环境、账号或描述中，英文忽略大小写。
 
 新任务申报中的 `description` 描述本次任务。可选字段 `profile_description` 在 Chrome 成功启动后保存为该目录的长期说明，后续任务省略此字段即可沿用。已有目录可以直接修改说明：
 

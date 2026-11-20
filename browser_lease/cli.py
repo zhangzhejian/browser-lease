@@ -42,6 +42,9 @@ def parser():
     profiles.add_argument("--environment")
     profiles.add_argument("--account")
     profiles.add_argument(
+        "--page", type=int, help="分页浏览现存 profile，从第 1 页开始，每页 25 项"
+    )
+    profiles.add_argument(
         "--search", default="", help="在环境、账号和描述中查找，多个关键词用空格分隔"
     )
     describe = sub.add_parser("describe-profile", help="给已有 profile 填写或修改账号说明")
@@ -99,7 +102,27 @@ def run(args, manager):
     if args.command == "purge-profile":
         return manager.purge_profile(args.task)
     if args.command == "profiles":
-        return {"profiles": manager.profiles(args.environment, args.account, args.search)}
+        if args.page is not None and args.page < 1:
+            raise Problem("invalid_arguments", "page 必须从 1 开始")
+        profiles = manager.profiles(args.environment, args.account, args.search)
+        if args.page is None:
+            return {"profiles": profiles}
+
+        profiles = sorted(
+            (p for p in profiles if p["exists"]),
+            key=lambda p: (p["environment"], p["account"], p["browser_data_dir"]),
+        )
+        page_size = 25
+        start = (args.page - 1) * page_size
+        end = start + page_size
+        fields = ("environment", "account", "description", "in_use_by", "browser_data_dir")
+        return {
+            "page": args.page,
+            "page_size": page_size,
+            "total": len(profiles),
+            "next_page": args.page + 1 if end < len(profiles) else None,
+            "profiles": [{key: p[key] for key in fields} for p in profiles[start:end]],
+        }
     if args.command == "describe-profile":
         return manager.describe_profile(args.browser_data_dir, args.description)
     if args.command == "events":

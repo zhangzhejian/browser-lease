@@ -23,14 +23,13 @@ browser-lease whoami
 
 ### 2. 先查这个账号已有的登录资料
 
-已知网站和用途时，先搜账号说明。已知登记名时也可精确过滤。
+找账号时先浏览现存 profile，阅读账号和描述，按任务用途选择：
 
 ```bash
-browser-lease profiles --search "BotLearn 管理员"
-browser-lease profiles --environment cn-test --account learner-a
+browser-lease profiles --page 1
 ```
 
-结果包含 `description`、`environment`、`account`、`browser_data_dir` 和 `exists`。空格分隔的关键词可以分别命中环境、账号或描述。选择实际存在、说明与任务相符的目录；多个候选时结合用途和占用情况判断。
+每页 25 个，按环境、账号和目录排列。读完本页仍需更多候选时，按 `next_page` 翻页；值为 `null` 表示已到末页。已知环境可以加 `--environment cn-test`。每条显示 `environment`、`account`、`description`、`in_use_by` 和 `browser_data_dir`。用选中条目的环境、账号和目录申报。已知登记用词时也可用 `--search` 缩小范围。
 
 账号要使用稳定的名字（如 `learner-a`、`teacher-main`），不要带日期或任务号，否则每次都是新 profile、
 都要重新登录。`account` 名就是 profile 的钥匙。查到 `default_location: false` 的旧目录且用户希望沿用时，
