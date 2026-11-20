@@ -78,10 +78,20 @@ def test_real_chrome_isolation_reconnect_cleanup(tmp_path):
     owner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
     pages = []
     try:
-        sa = spec(tmp_path, "a", chrome_executable=exe, agent_pid=owner.pid)
+        sa = spec(
+            tmp_path,
+            "a",
+            chrome_executable=exe,
+            agent_pid=owner.pid,
+            profile_description="测试管理员",
+        )
         sb = spec(tmp_path, "b", chrome_executable=exe)
         a = m.register(sa)
         b = m.register(sb)
+        assert m.profiles(search="管理员")[0]["browser_data_dir"] == sa["browser_data_dir"]
+        m.describe_profile(sa["browser_data_dir"], "新版管理员说明")
+        m.register(sa)
+        assert m.profiles(account="a")[0]["description"] == "新版管理员说明"
         assert a["status"] == b["status"] == "ready"
         assert a["browser_identity"] != b["browser_identity"]
         assert a["connection"]["cdp_url"] != b["connection"]["cdp_url"]
@@ -152,7 +162,9 @@ def test_real_chrome_isolation_reconnect_cleanup(tmp_path):
             "agent_pid": os.getpid(),
             "artifacts_dir": str(tmp_path / "a-next" / "artifacts"),
         }
+        del sa2["profile_description"]
         a2 = fresh.register(sa2)
+        assert fresh.profiles(account="a")[0]["description"] == "新版管理员说明"
         pa2 = Page(a2["connection"])
         pages.append(pa2)
         pa2.navigate(url)
@@ -160,6 +172,7 @@ def test_real_chrome_isolation_reconnect_cleanup(tmp_path):
         pa2.close()
         fresh.stop("a-next")
         assert fresh.purge_profile("a-next")["profile_purged"]
+        assert fresh.profiles(account="a")[0]["description"] == ""
         assert Path(sa2["artifacts_dir"]).exists()
         assert pb.evaluate("localStorage.getItem('qa')") == "b"
     finally:

@@ -1,6 +1,7 @@
 {
   "task": "qa-001",
   "description": "中国 Test：普通学员 A 学习主线",
+  "profile_description": "BotLearn 中国测试环境的普通学员 A，用于学习流程验收",
   "slot": "worker-a",
   "agent_pid": 1111,
   "environment": "cn-test",

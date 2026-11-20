@@ -23,9 +23,13 @@ browser-lease whoami
 
 ### 2. 先查这个账号已有的登录资料
 
+找账号时先浏览现存 profile，阅读账号和描述，按任务用途选择：
+
 ```bash
-browser-lease profiles --environment cn-test --account learner-a
+browser-lease profiles --page 1
 ```
+
+每页 25 个，按环境、账号和目录排列。读完本页仍需更多候选时，按 `next_page` 翻页；值为 `null` 表示已到末页。已知环境可以加 `--environment cn-test`。每条显示 `environment`、`account`、`description`、`in_use_by` 和 `browser_data_dir`。用选中条目的环境、账号和目录申报。已知登记用词时也可用 `--search` 缩小范围。
 
 账号要使用稳定的名字（如 `learner-a`、`teacher-main`），不要带日期或任务号，否则每次都是新 profile、
 都要重新登录。`account` 名就是 profile 的钥匙。查到 `default_location: false` 的旧目录且用户希望沿用时，
@@ -38,6 +42,7 @@ cat > /tmp/browser-lease-task.json <<'JSON'
 {
   "task": "qa-001",
   "description": "一句话说明要做什么",
+  "profile_description": "BotLearn 中国测试环境的普通学员 A，用于学习流程验收",
   "slot": "worker-a",
   "agent_pid": 12345,
   "environment": "cn-test",
@@ -62,6 +67,7 @@ browser-lease register --file /tmp/browser-lease-task.json
 | agent_pid | 上一步得到的 PID，必须存活且属于当前用户 |
 | environment | 环境标识，账号和资源冲突都在同一 environment 内判定 |
 | account | 登录账号标识。同环境独占，即使只读。不登录时统一填 `visitor` |
+| profile_description | 可选。首次登记或主动修改时填写平台、账号角色和用途，省略沿用已有说明。只写已知信息，勿写密码、验证码或令牌 |
 | course_run | 学习实例标识，不涉及填 `null` |
 | browser_data_dir | 通常省略，自动使用 `~/browser-lease-data/profiles/<environment>/<account>`，跨任务保留登录 |
 | artifacts_dir | 截图、下载等证据目录，绝对路径，不能与 profile 目录相同或嵌套 |
@@ -71,6 +77,13 @@ browser-lease register --file /tmp/browser-lease-task.json
 | resources | 业务对象列表，同 kind+id 任一为 write 即冲突 |
 
 不要在申报里写密码或 token。
+
+已有 profile 可直接补充说明，无需启动 Chrome：
+
+```bash
+browser-lease describe-profile --browser-data-dir ~/browser-lease-data/profiles/cn-test/learner-a \
+  --description "BotLearn 中国测试环境的普通学员 A，用于学习流程验收"
+```
 
 ### 4. 处理冲突（退出码 3）
 

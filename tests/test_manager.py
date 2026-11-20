@@ -102,6 +102,8 @@ def test_resource_read_write_conflicts(tmp_path):
         {"environment_access": "anything"},
         {"course_run": ""},
         {"token": "not-allowed"},
+        {"profile_description": None},
+        {"profile_description": "x" * 2001},
     ],
 )
 def test_invalid_contract(tmp_path, overrides):
@@ -321,3 +323,80 @@ def test_profiles_lists_reuse_and_occupancy(tmp_path):
     assert profile["in_use_by"] == "task-b"
     assert profile["default_location"] is True
     assert profile["exists"] is False
+
+
+def test_profile_pages_list_existing_accounts_and_descriptions(tmp_path):
+    from browser_lease.cli import parser, run
+
+    m = Manager(tmp_path / "state")
+    for i in range(27):
+        s = normalize(spec(tmp_path, f"task-{i:02d}", profile_description=f"账号用途 {i}"))
+        if i != 0:
+            Path(s["browser_data_dir"]).mkdir(parents=True)
+        m.save({"spec": s, "status": "stopped"}, "ready")
+
+    def page(n, *filters):
+        return run(parser().parse_args(["profiles", "--page", str(n), *filters]), m)
+
+    first = page(1)
+    last = page(first["next_page"])
+    assert (first["total"], first["page_size"], len(first["profiles"])) == (26, 25, 25)
+    assert (last["page"], last["next_page"]) == (2, None)
+    entries = first["profiles"] + last["profiles"]
+    assert [p["account"] for p in entries] == [f"task-{i:02d}" for i in range(1, 27)]
+    assert entries[-1] == {
+        "account": "task-26",
+        "environment": "cn-test",
+        "description": "账号用途 26",
+        "browser_data_dir": str(tmp_path / "task-26" / "profile"),
+        "in_use_by": None,
+    }
+    assert page(1, "--account", "task-26")["profiles"] == last["profiles"]
+    assert page(1, "--environment", "prod")["total"] == 0
+    assert page(3)["profiles"] == []
+    with pytest.raises(Problem, match="page"):
+        page(0)
+
+
+def test_profile_descriptions_for_existing_directories(tmp_path):
+    from browser_lease.cli import parser, run
+
+    m = Manager(tmp_path / "state")
+    for task in ("first", "second"):
+        s = normalize(spec(tmp_path, task, account="qa", description="只描述本次任务"))
+        m.directory(s, "browser_data_dir", create=True)
+        m.save({"spec": s, "status": "stopped"}, "fixture")
+
+    def cli(*args):
+        return run(parser().parse_args(args), m)
+
+    assert [p["description"] for p in cli("profiles")["profiles"]] == ["", ""]
+    edit = ("describe-profile", "--browser-data-dir", str(tmp_path / "second" / "profile"))
+    changed = cli(*edit, "--description", " BotLearn 测试管理员 ")
+    assert changed["description"] == "BotLearn 测试管理员"
+    result = cli("profiles", "--search", "QA 管理员 botlearn", "--environment", "cn-test")
+    assert result["profiles"] == [changed]
+    assert not cli("profiles", "--environment", "prod", "--search", "管理员")["profiles"]
+    assert not cli("profiles", "--search", "本次任务")["profiles"]
+    assert cli(*edit, "--description", "")["description"] == ""
+    assert not cli("profiles", "--search", "管理员")["profiles"]
+    with pytest.raises(Problem, match="找不到"):
+        cli(
+            "describe-profile",
+            "--browser-data-dir",
+            str(tmp_path / "missing"),
+            "--description",
+            "x",
+        )
+    assert not (tmp_path / "missing").exists()
+
+
+def test_recreated_profile_path_uses_current_account_description(tmp_path):
+    m = Manager(tmp_path / "state")
+    path = str(tmp_path / "shared")
+    for at, name in enumerate(("z-old", "a-new"), start=1):
+        s = normalize(spec(tmp_path, name, browser_data_dir=path, profile_description=name))
+        m.save({"spec": s, "status": "stopped", "created_at": at}, "ready")
+    [profile] = m.profiles()
+    assert (profile["account"], profile["description"], profile["tasks"]) == ("a-new", "a-new", 1)
+    assert not m.profiles(account="z-old")
