@@ -102,6 +102,8 @@ def test_resource_read_write_conflicts(tmp_path):
         {"environment_access": "anything"},
         {"course_run": ""},
         {"token": "not-allowed"},
+        {"profile_description": None},
+        {"profile_description": "x" * 2001},
     ],
 )
 def test_invalid_contract(tmp_path, overrides):
@@ -321,3 +323,47 @@ def test_profiles_lists_reuse_and_occupancy(tmp_path):
     assert profile["in_use_by"] == "task-b"
     assert profile["default_location"] is True
     assert profile["exists"] is False
+
+
+def test_profile_descriptions_for_existing_directories(tmp_path):
+    from browser_lease.cli import parser, run
+
+    m = Manager(tmp_path / "state")
+    for task in ("first", "second"):
+        s = normalize(spec(tmp_path, task, account="qa", description="只描述本次任务"))
+        m.directory(s, "browser_data_dir", create=True)
+        m.save({"spec": s, "status": "stopped"}, "fixture")
+
+    def cli(*args):
+        return run(parser().parse_args(args), m)
+
+    assert [p["description"] for p in cli("profiles")["profiles"]] == ["", ""]
+    edit = ("describe-profile", "--browser-data-dir", str(tmp_path / "second" / "profile"))
+    changed = cli(*edit, "--description", " BotLearn 测试管理员 ")
+    assert changed["description"] == "BotLearn 测试管理员"
+    result = cli("profiles", "--search", "QA 管理员 botlearn", "--environment", "cn-test")
+    assert result["profiles"] == [changed]
+    assert not cli("profiles", "--environment", "prod", "--search", "管理员")["profiles"]
+    assert not cli("profiles", "--search", "本次任务")["profiles"]
+    assert cli(*edit, "--description", "")["description"] == ""
+    assert not cli("profiles", "--search", "管理员")["profiles"]
+    with pytest.raises(Problem, match="找不到"):
+        cli(
+            "describe-profile",
+            "--browser-data-dir",
+            str(tmp_path / "missing"),
+            "--description",
+            "x",
+        )
+    assert not (tmp_path / "missing").exists()
+
+
+def test_recreated_profile_path_uses_current_account_description(tmp_path):
+    m = Manager(tmp_path / "state")
+    path = str(tmp_path / "shared")
+    for at, name in enumerate(("z-old", "a-new"), start=1):
+        s = normalize(spec(tmp_path, name, browser_data_dir=path, profile_description=name))
+        m.save({"spec": s, "status": "stopped", "created_at": at}, "ready")
+    [profile] = m.profiles()
+    assert (profile["account"], profile["description"], profile["tasks"]) == ("a-new", "a-new", 1)
+    assert not m.profiles(account="z-old")

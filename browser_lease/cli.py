@@ -38,9 +38,17 @@ def parser():
     cleanup.add_argument("--apply", action="store_true", help="执行回收；默认只列候选")
     purge = sub.add_parser("purge-profile", help="显式删除已停止任务的受管登录资料；保留证据")
     purge.add_argument("task")
-    profiles = sub.add_parser("profiles", help="按环境和账号列出已用过的登录资料目录及占用情况")
+    profiles = sub.add_parser("profiles", help="查看登录资料目录、账号说明和占用情况")
     profiles.add_argument("--environment")
     profiles.add_argument("--account")
+    profiles.add_argument(
+        "--search", default="", help="在环境、账号和描述中查找，多个关键词用空格分隔"
+    )
+    describe = sub.add_parser("describe-profile", help="给已有 profile 填写或修改账号说明")
+    describe.add_argument(
+        "--browser-data-dir", required=True, help="profiles 结果中的 browser_data_dir"
+    )
+    describe.add_argument("--description", required=True, help="账号说明，传空字符串可清除")
     events = sub.add_parser("events", help="查看任务生命周期审计记录")
     events.add_argument("task")
     events.add_argument("--limit", type=int, default=50)
@@ -91,7 +99,9 @@ def run(args, manager):
     if args.command == "purge-profile":
         return manager.purge_profile(args.task)
     if args.command == "profiles":
-        return {"profiles": manager.profiles(args.environment, args.account)}
+        return {"profiles": manager.profiles(args.environment, args.account, args.search)}
+    if args.command == "describe-profile":
+        return manager.describe_profile(args.browser_data_dir, args.description)
     if args.command == "events":
         if not 1 <= args.limit <= 500:
             raise Problem("invalid_arguments", "limit 范围为 1–500")

@@ -131,6 +131,12 @@ def native_launch(args: list[str]) -> list[str]:
     return args
 
 
+def profile_description(value: str) -> str:
+    if not isinstance(value, str) or len(value) > 2000:
+        raise Problem("invalid_request", "profile description 必须是 2000 字以内的文本")
+    return value.strip()
+
+
 def normalize(raw: dict, profile_root: Path = PROFILE_ROOT) -> dict:
     if not isinstance(raw, dict):
         raise Problem("invalid_request", "申报必须是 JSON 对象")
@@ -146,6 +152,7 @@ def normalize(raw: dict, profile_root: Path = PROFILE_ROOT) -> dict:
     }
     optional = {
         "description",
+        "profile_description",
         "headless",
         "chrome_executable",
         "resources",
@@ -198,6 +205,8 @@ def normalize(raw: dict, profile_root: Path = PROFILE_ROOT) -> dict:
     s.setdefault("description", "")
     if not isinstance(s["description"], str) or len(s["description"]) > 2000:
         raise Problem("invalid_request", "description 最多 2000 字符")
+    if "profile_description" in s:
+        s["profile_description"] = profile_description(s["profile_description"])
     s.setdefault("resources", [])
     if not isinstance(s["resources"], list) or len(s["resources"]) > 100:
         raise Problem("invalid_request", "resources 最多 100 项")
@@ -277,6 +286,10 @@ class Manager:
             db.executescript("""
                     CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                     CREATE TABLE IF NOT EXISTS tasks (task TEXT PRIMARY KEY, record TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS profile_descriptions (
+                        browser_data_dir TEXT NOT NULL, environment TEXT NOT NULL,
+                        account TEXT NOT NULL, description TEXT NOT NULL,
+                        PRIMARY KEY (browser_data_dir, environment, account));
                     CREATE TABLE IF NOT EXISTS events (
                         seq INTEGER PRIMARY KEY, at REAL NOT NULL, task TEXT NOT NULL,
                         action TEXT NOT NULL, detail TEXT NOT NULL);
@@ -339,6 +352,22 @@ class Manager:
                 "INSERT INTO events(at, task, action, detail) VALUES (?, ?, ?, ?)",
                 (time.time(), task, action, json.dumps(detail or {}, ensure_ascii=False)),
             )
+            spec = row["spec"]
+            if action == "ready" and "profile_description" in spec:
+                self.write_profile_description(db, spec, spec["profile_description"])
+            elif action == "profile_purged":
+                db.execute(
+                    "DELETE FROM profile_descriptions WHERE browser_data_dir = ?",
+                    (spec["browser_data_dir"],),
+                )
+
+    @staticmethod
+    def write_profile_description(db: sqlite3.Connection, profile: dict, description: str):
+        db.execute(
+            """INSERT OR REPLACE INTO profile_descriptions
+               (browser_data_dir, environment, account, description) VALUES (?, ?, ?, ?)""",
+            (profile["browser_data_dir"], profile["environment"], profile["account"], description),
+        )
 
     def marker_data(self, spec: dict, kind: str) -> dict:
         data = {"registry": self.registry_id, "kind": kind}
@@ -725,18 +754,34 @@ class Manager:
             self.save(row, "profile_purged")
             return self.view(row)
 
-    def profiles(self, environment: str | None = None, account: str | None = None) -> list[dict]:
+    def describe_profile(self, browser_data_dir: str, description: str) -> dict:
+        description = profile_description(description)
+        path = str(Path(browser_data_dir).expanduser().resolve())
+        with self.lock():
+            for profile in self.profiles():
+                if profile["browser_data_dir"] == path and profile["exists"]:
+                    self.directory(profile, "browser_data_dir")
+                    with self.db() as db:
+                        self.write_profile_description(db, profile, description)
+                    return {**profile, "description": description}
+        raise Problem("not_found", "找不到此目录对应的现存 profile", browser_data_dir=path)
+
+    def profiles(
+        self, environment: str | None = None, account: str | None = None, search: str = ""
+    ) -> list[dict]:
         """Registry view of login profiles; never reads cookies or saved passwords."""
         found: dict[str, dict] = {}
-        for row in self.rows():
+        # A purged path may later belong to a different account. The newest registration
+        # determines whose description and usage history apply to the current profile.
+        for row in sorted(self.rows(), key=lambda r: r.get("created_at", 0.0)):
             s = row["spec"]
-            if (environment and s["environment"] != environment) or (
-                account and s["account"] != account
+            path = s["browser_data_dir"]
+            item = found.get(path)
+            if item is None or (item["environment"], item["account"]) != (
+                s["environment"],
+                s["account"],
             ):
-                continue
-            item = found.setdefault(
-                s["browser_data_dir"],
-                {
+                item = found[path] = {
                     "browser_data_dir": s["browser_data_dir"],
                     "environment": s["environment"],
                     "account": s["account"],
@@ -744,17 +789,36 @@ class Manager:
                     "last_task": None,
                     "last_used_at": 0.0,
                     "in_use_by": None,
-                },
-            )
+                }
             item["tasks"] += 1
             used = row.get("updated_at") or row.get("created_at") or 0.0
             if used >= item["last_used_at"]:
                 item["last_task"], item["last_used_at"] = s["task"], used
             if row["status"] in ACTIVE:
                 item["in_use_by"] = s["task"]
+        with self.db() as db:
+            descriptions = {
+                (path, env, acct): desc
+                for path, env, acct, desc in db.execute(
+                    "SELECT browser_data_dir, environment, account, description FROM profile_descriptions"
+                )
+            }
+        terms = search.casefold().split()
         result = []
         for item in found.values():
+            if (environment and item["environment"] != environment) or (
+                account and item["account"] != account
+            ):
+                continue
             path = Path(item["browser_data_dir"])
+            key = (item["browser_data_dir"], item["environment"], item["account"])
+            item["description"] = descriptions.get(key, "")
+            if terms:
+                text = " ".join(
+                    (item["environment"], item["account"], item["description"])
+                ).casefold()
+                if not all(term in text for term in terms):
+                    continue
             item["exists"] = path.exists()
             default = self.profile_root / item["environment"] / item["account"]
             item["default_location"] = path == default.resolve()
